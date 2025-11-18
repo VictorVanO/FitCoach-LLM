@@ -1,7 +1,4 @@
 import streamlit as st
-import numpy as np
-
-
 st.title("Fit Coach LLM")
 
 user_age = st.text_input("Enter your age:")
