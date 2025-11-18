@@ -28,30 +28,74 @@ Format your response as:
 
 # Create prompt and chain
 prompt = PromptTemplate.from_template(template)
-model = ChatMistralAI(model="mistral-small-latest", temperature=0.3)
+model = ChatMistralAI(model="magistral-small-latest", temperature=0.3)
 output_parser = StrOutputParser()
 
 chain = prompt | model | output_parser
 
-
 st.title("Fit Coach LLM")
 
-user_age = st.text_input("Enter your age:")
-user_gender = st.text_input("Enter your gender:")
-user_height = st.text_input("Enter your height (in cm):")
-user_weight = st.text_input("Enter your weight (in kg):")
-user_goals = st.text_input("Enter your goals")
-user_daily_time = st.text_input("Enter your time per day (in minutes):")
-user_days_per_week = st.text_input("Enter your available days per week:")
+# Improved input fields with better UX
+user_gender = st.selectbox(
+    "Select your gender:",
+    options=["Male", "Female", "Other"],
+    index=0
+)
 
-if st.button("Send"):
+user_age = st.number_input(
+    "Enter your age:",
+    min_value=1,
+    max_value=120,
+    value=25,
+    step=1
+)
+
+user_height = st.number_input(
+    "Enter your height (in cm):",
+    min_value=100,
+    max_value=250,
+    value=180,
+    step=1
+)
+
+user_weight = st.number_input(
+    "Enter your weight (in kg):",
+    min_value=30,
+    max_value=200,
+    value=75,
+    step=1
+)
+
+user_goals = st.text_input(
+    "Enter your fitness goals (e.g., build muscle, lose weight, improve endurance):",
+    value="build muscle"
+)
+
+user_daily_time = st.number_input(
+    "Enter your daily training time (in minutes):",
+    min_value=10,
+    max_value=180,
+    value=60,
+    step=5
+)
+
+user_days_per_week = st.number_input(
+    "Enter your available training days per week:",
+    min_value=1,
+    max_value=7,
+    value=5,
+    step=1
+)
+
+if st.button("Generate Workout Plan"):
     response = chain.invoke({
         "gender": user_gender,
-        "age": user_age,
-        "height": user_height,
-        "weight": user_weight,
+        "age": str(user_age),
+        "height": str(user_height),
+        "weight": str(user_weight),
         "goals": user_goals,
-        "daily_time": user_daily_time,
-        "days_per_week": user_days_per_week
+        "daily_time": str(user_daily_time),
+        "days_per_week": str(user_days_per_week)
     })
-    st.write("Mistral's answer:", response)
+    st.write("Your personalized workout plan:")
+    st.write(response)
