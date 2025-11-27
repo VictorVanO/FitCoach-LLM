@@ -131,9 +131,10 @@ user_daily_time = st.number_input(
 )
 
 
+
 # --- BODY PARTS SELECTION ---
 st.subheader("Target Zones")
-st.write("Check the body parts you want to work on:")
+st.write("Select the body parts you want to train:")
 
 BODY_PARTS = [
     "Legs 🦵",
@@ -144,32 +145,56 @@ BODY_PARTS = [
     "Abs 🍫",
 ]
 
-selected_parts = {}
 
-for part_name_with_emoji in BODY_PARTS:
-    selected_parts[part_name_with_emoji] = st.checkbox(
-        part_name_with_emoji, 
-        key=f"check_{part_name_with_emoji}"
-    )
+# Checkbox All
+full_body = st.checkbox("Check All — FULL BODY 🔥  ", key="full_body")
+
+st.markdown(
+    """<hr style="margin-top: -8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2);">""",
+    unsafe_allow_html=True
+)
+
+if full_body:
+    for part in BODY_PARTS:
+        st.session_state[f"check_{part}"] = True
+else:
+    for part in BODY_PARTS:
+        st.session_state[f"check_{part}"] = False
+
+# Normal Checkboxes
+selected_parts = {}
+for part in BODY_PARTS:
+    selected_parts[part] = st.checkbox(part, key=f"check_{part}")
 
 st.markdown("---")
 
+
 # SECTION: BUTTON SEND
 if st.button("Generate My Program", type="primary"):
+
+    loading_placeholder = st.empty()
+    result_placeholder = st.empty()
+
     final_selection = [part for part, is_checked in selected_parts.items() if is_checked]
     
     if not final_selection:
         st.warning("Please select at least one zone to work on.")
     else:
-        response = chain.invoke({
-            "gender": user_gender,
-            "age": str(user_age),
-            "height": str(user_height),
-            "weight": str(user_weight),
-            "goals": user_goals,
-            "target_zones": ", ".join(final_selection),
-            "daily_time": str(user_daily_time),
-            "days_per_week": str(user_days_per_week)
-        })
-        st.write("Your personalized workout plan:")
-        st.write(response)
+        with loading_placeholder:
+            with st.spinner("⌛ Generating your personalized workout program..."):
+                response = chain.invoke({
+                    "gender": user_gender,
+                    "age": str(user_age),
+                    "height": str(user_height),
+                    "weight": str(user_weight),
+                    "goals": user_goals,
+                    "target_zones": ", ".join(final_selection),
+                    "daily_time": str(user_daily_time),
+                    "days_per_week": str(user_days_per_week)
+                })
+
+        loading_placeholder.empty()
+
+        with result_placeholder:
+            st.write("### ✅ Your personalized workout plan:")
+            st.write(response)
