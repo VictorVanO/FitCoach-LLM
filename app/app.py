@@ -34,6 +34,14 @@ For each training day, provide:
 3. Main exercises (3-5 exercises per session)
 4. Cool-down/stretching (5-10 minutes)
 
+For each exercise, also include:
+- A short YouTube video link demonstrating correct movement.
+Rules for videos:
+• Use well-known fitness channels (e.g., ATHLEAN-X, Jeff Nippard, Muscle & Motion, Jeremy Ethier)
+• Choose short videos (30s–3min) when possible
+• Ensure the link matches the exercise name
+• Always output a direct YouTube link (https://www.youtube.com/...)
+
 Output Format:
 - Workout Plan (detailed breakdown for each training day):
   Day 1: [Focus]
