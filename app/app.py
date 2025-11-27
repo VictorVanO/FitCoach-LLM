@@ -166,7 +166,7 @@ if st.session_state.full_body != st.session_state.full_body_prev:
 
     st.session_state.full_body_prev = st.session_state.full_body
 
-# Normal Checkboxe
+# Normal Checkboxes
 selected_parts = {}
 for part in BODY_PARTS:
     selected_parts[part] = st.checkbox(part, key=f"check_{part}")
@@ -176,31 +176,32 @@ st.markdown("---")
 
 
 # SECTION: BUTTON SEND
-if st.button("Generate My Program", type="primary"):
+if "program_response" not in st.session_state:
+    st.session_state.program_response = None
 
-    loading_placeholder = st.empty()
-    result_placeholder = st.empty()
+generate_clicked = st.button("Generate My Program", type="primary")
 
+if generate_clicked:
     final_selection = [part for part, is_checked in selected_parts.items() if is_checked]
     
     if not final_selection:
         st.warning("Please select at least one zone to work on.")
     else:
-        with loading_placeholder:
-            with st.spinner("⌛ Generating your personalized workout program..."):
-                response = chain.invoke({
-                    "gender": user_gender,
-                    "age": str(user_age),
-                    "height": str(user_height),
-                    "weight": str(user_weight),
-                    "goals": user_goals,
-                    "target_zones": ", ".join(final_selection),
-                    "daily_time": str(user_daily_time),
-                    "days_per_week": str(user_days_per_week)
-                })
+        with st.spinner("⌛ Generating your personalized workout program..."):
+            response = chain.invoke({
+                "gender": user_gender,
+                "age": str(user_age),
+                "height": str(user_height),
+                "weight": str(user_weight),
+                "goals": user_goals,
+                "target_zones": ", ".join(final_selection),
+                "daily_time": str(user_daily_time),
+                "days_per_week": str(user_days_per_week)
+            })
+        # On sauvegarde la réponse dans la session
+        st.session_state.program_response = response
 
-        loading_placeholder.empty()
-
-        with result_placeholder:
-            st.write("### ✅ Your personalized workout plan:")
-            st.write(response)
+# Affichage persistant du dernier programme généré
+if st.session_state.program_response:
+    st.write("### ✅ Your personalized workout plan:")
+    st.write(st.session_state.program_response)
