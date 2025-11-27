@@ -137,28 +137,34 @@ BODY_PARTS = [
     "Abs 🍫",
 ]
 
+if "full_body_prev" not in st.session_state:
+    st.session_state.full_body_prev = False
 
 # Checkbox All
-full_body = st.checkbox("Check All — FULL BODY 🔥  ", key="full_body")
+full_body = st.checkbox("Check All — FULL BODY 🔥", key="full_body")
 
 st.markdown(
     """<hr style="margin-top: -8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2);">""",
     unsafe_allow_html=True
 )
 
-if full_body:
-    for part in BODY_PARTS:
-        st.session_state[f"check_{part}"] = True
-else:
-    for part in BODY_PARTS:
-        st.session_state[f"check_{part}"] = False
+if st.session_state.full_body != st.session_state.full_body_prev:
+    if st.session_state.full_body:   # vient d'être coché
+        for part in BODY_PARTS:
+            st.session_state[f"check_{part}"] = True
+    else:                            # vient d'être décoché
+        for part in BODY_PARTS:
+            st.session_state[f"check_{part}"] = False
 
-# Normal Checkboxes
+    st.session_state.full_body_prev = st.session_state.full_body
+
+# Normal Checkboxe
 selected_parts = {}
 for part in BODY_PARTS:
     selected_parts[part] = st.checkbox(part, key=f"check_{part}")
 
 st.markdown("---")
+
 
 
 # SECTION: BUTTON SEND
