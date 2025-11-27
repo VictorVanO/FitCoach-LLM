@@ -18,6 +18,7 @@ Goals: {goals}
 Target Zones: {target_zones}
 Daily available time for training: {daily_time} minutes
 Days per week available for training: {days_per_week} days
+Equipment available: {equipment}
 
 Program Design Principles:
 1. Include proper warm-up and cool-down routines
@@ -152,7 +153,7 @@ if "full_body_prev" not in st.session_state:
 full_body = st.checkbox("Check All — FULL BODY 🔥", key="full_body")
 
 st.markdown(
-    """<hr style="margin-top: -8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2);">""",
+    """<hr style="margin-top: -8px; margin-bottom: 10px; border: 0.1px solid rgba(255,255,255,0.2);">""",
     unsafe_allow_html=True
 )
 
@@ -171,8 +172,69 @@ selected_parts = {}
 for part in BODY_PARTS:
     selected_parts[part] = st.checkbox(part, key=f"check_{part}")
 
-st.markdown("---")
 
+
+# --- EQUIPMENT SECTION ---
+st.subheader("Equipment")
+
+equipment_mode = st.radio(
+    "Do you have training equipment available?",
+    ["No equipment", "With equipment"],
+    index=0,
+    horizontal=True
+)
+
+EQUIPMENT_OPTIONS = [
+    "Dumbbells",
+    "Barbell",
+    "Kettlebell",
+    "Resistance bands",
+    "Pull-up bar",
+    "Bench",
+    "Gym machines",
+    "TRX / suspension trainer",
+]
+
+# With Equipement
+if "equip_all_prev" not in st.session_state:
+    st.session_state.equip_all_prev = False
+
+selected_equipment = []
+if equipment_mode == "With equipment":
+
+    # --- Check all ---
+    equip_all = st.checkbox("Check All — Equipment 💼", key="equip_all")
+
+    st.markdown(
+        """<hr style="margin-top: -8px; margin-bottom: 10px; border: 0.5px solid rgba(255,255,255,0.2);">""",
+        unsafe_allow_html=True
+    )
+
+    if st.session_state.equip_all != st.session_state.equip_all_prev:
+        if st.session_state.equip_all:
+            for eq in EQUIPMENT_OPTIONS:
+                st.session_state[f"eq_{eq}"] = True
+        else:
+            for eq in EQUIPMENT_OPTIONS:
+                st.session_state[f"eq_{eq}"] = False
+
+        st.session_state.equip_all_prev = st.session_state.equip_all
+
+    # Normal checkboxes
+    for eq in EQUIPMENT_OPTIONS:
+        if st.checkbox(eq, key=f"eq_{eq}"):
+            selected_equipment.append(eq)
+
+else:
+    # No equipement
+    selected_equipment = []
+
+
+# LINE FOR SEPARATION
+st.markdown(
+    """<hr style="margin-top: 20px; margin-bottom: 10px; border: 2px solid rgba(255,255,255,0.2);">""",
+    unsafe_allow_html=True
+)
 
 
 # SECTION: BUTTON SEND
@@ -187,6 +249,13 @@ if generate_clicked:
     if not final_selection:
         st.warning("Please select at least one zone to work on.")
     else:
+        # Texte propre pour le matériel
+        equipment_text = (
+            ", ".join(selected_equipment)
+            if selected_equipment
+            else "No equipment (bodyweight / home workouts only)"
+        )
+
         with st.spinner("⌛ Generating your personalized workout program..."):
             response = chain.invoke({
                 "gender": user_gender,
@@ -196,9 +265,9 @@ if generate_clicked:
                 "goals": user_goals,
                 "target_zones": ", ".join(final_selection),
                 "daily_time": str(user_daily_time),
-                "days_per_week": str(user_days_per_week)
+                "days_per_week": str(user_days_per_week),
+                "equipment": equipment_text,
             })
-        # On sauvegarde la réponse dans la session
         st.session_state.program_response = response
 
 # Affichage persistant du dernier programme généré
