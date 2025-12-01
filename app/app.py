@@ -8,6 +8,7 @@ import re
 from prompt import workout_prompt
 
 
+
 load_dotenv(override=True)
 
 BASE_URL = "https://v2.exercisedb.dev/api/v1"
@@ -201,7 +202,7 @@ if generate_clicked:
             else "No equipment (bodyweight / home workouts only)"
         )
 
-        with st.spinner("⌛ Generating your personalized workout program..."):
+        with st.spinner("⌛ Generating your personalized workout program... This can take up to a minute."):
             response = chain.invoke({
                 "gender": user_gender,
                 "age": str(user_age),
@@ -215,37 +216,54 @@ if generate_clicked:
             })
         st.session_state.program_response = response
 
+if st.session_state.program_response:
     st.write("### ✅ Your personalized workout plan:")
-    st.write(response)
+    st.write(st.session_state.program_response)
 
-    # PARSE CANONICAL EXERCISE NAMES
-    canonical_names = []
-    for line in response.split("\n"):
+canonical_names = []
+
+if st.session_state.program_response:
+    for line in st.session_state.program_response.split("\n"):
         match = re.search(r"Canonical Exercise Name:\s*(.*)", line)
         if match:
             canonical_names.append(match.group(1).strip())
 
-    if not canonical_names:
-        st.error("❌ No canonical exercise names found.")
-        st.stop()
+# Deduplicate canonical names early
+canonical_names = list(dict.fromkeys([ex.strip() for ex in canonical_names]))
 
+# EXERCISE VIDEO SECTION
+if canonical_names:
     st.markdown("---")
     st.subheader("🏋️ Exercise Videos")
 
-    # FETCH + DISPLAY VIDEOS from ExerciseDB API
-    seen = set()
-    for ex_name in canonical_names:
-        if ex_name.lower() in seen:
-            continue
-        seen.add(ex_name.lower())
+    if "selected_exercise" not in st.session_state:
+        st.session_state.selected_exercise = None
 
-        info = fetch_exercise_video(ex_name)
+    st.write("Click an exercise to view its video:")
 
-        if info and info.get("video"):
-            st.markdown(f"**{info['name']}**")
-            st.video(info["video"])
-        elif info and info.get("image"):
-            st.markdown(f"**{info['name']}** (video not available, showing image)")
-            st.image(info["image"], caption=info["name"])
-        else:
-            st.warning(f"No media found for '{ex_name}'")
+    # Remove duplicates & normalize names
+    unique_exercises = list(dict.fromkeys([ex.strip().lower() for ex in canonical_names]))
+
+    # Map back to original formatting while keeping stable unique keys
+    for ex_raw in canonical_names:
+        ex_key = "btn_" + re.sub(r'[^a-zA-Z0-9]', '_', ex_raw.lower()).strip("_")
+
+        if st.button(ex_raw, key=ex_key):
+            st.session_state.selected_exercise = ex_raw
+
+    # Modal
+    if st.session_state.selected_exercise:
+        info = fetch_exercise_video(st.session_state.selected_exercise)
+
+        # Use expander to show/hide content
+        with st.expander(f"{st.session_state.selected_exercise} — Video", expanded=True):
+            if info and info.get("video"):
+                st.video(info["video"], start_time=0)
+            elif info and info.get("image"):
+                st.image(info["image"], caption=info["name"])
+            else:
+                st.warning("No media found.")
+
+            if st.button("Close", key="close_modal"):
+                st.session_state.selected_exercise = None
+
