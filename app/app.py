@@ -5,14 +5,14 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 import re
+from prompt import workout_prompt
+
 
 load_dotenv(override=True)
 
 BASE_URL = "https://v2.exercisedb.dev/api/v1"
 
-# ---------------------------------------------------------
-# 🔥 ExerciseDB search & video function
-# ---------------------------------------------------------
+# ExerciseDB API search & video function
 def fetch_exercise_video(ex_name):
     """
     Search ExerciseDB for the exercise name and return the closest match videoUrl.
@@ -61,56 +61,11 @@ def fetch_exercise_video(ex_name):
     except:
         return None
 
-# ---------------------------------------------------------
-# 🔥 LLM Prompt
-# ---------------------------------------------------------
-template = """
-You are an expert workout coach with 10 years of experience.
-Please create a workout program with the following information about the user:
-
-Gender: {gender}
-Age: {age}
-Height: {height} cm
-Weight: {weight} kg
-Goals: {goals}
-Target Zones: {target_zones}
-Daily available time for training: {daily_time} minutes
-Days per week available for training: {days_per_week} days
-Equipment available: {equipment}
-
-Program Design Principles:
-1. Warm-up + cool-down included
-2. Balance strength, endurance, flexibility
-3. Provide exercises with sets, reps, rest
-4. Age considerations
-5. Progressive overload when needed
-6. Injury prevention
-
-Workout Plan Structure (for each day):
-• Day focus
-• Warm-up (5–10 min)
-• 3–5 main exercises
-• Cool-down (5–10 min)
-
-📌 IMPORTANT:  
-After each exercise you provide, ALWAYS output a separate line:
-
-Canonical Exercise Name: <simple common name>
-
-Rules:
-- MUST be a real, common exercise name found in public databases
-- Avoid niche variations
-- Keep it short (e.g., Squat, Bench Press, Pull-up, Plank)
-"""
-
-prompt = PromptTemplate.from_template(template)
 model = ChatMistralAI(model="magistral-small-latest", temperature=0.3)
 output_parser = StrOutputParser()
-chain = prompt | model | output_parser
+chain = workout_prompt | model | output_parser
 
-# ---------------------------------------------------------
 # STREAMLIT UI
-# ---------------------------------------------------------
 st.set_page_config(page_title="Fit Coach LLM", layout="centered", initial_sidebar_state="collapsed")
 st.title("Fit Coach LLM")
 st.markdown("<br>", unsafe_allow_html=True)
@@ -163,8 +118,6 @@ if st.session_state.full_body != st.session_state.full_body_prev:
     st.session_state.full_body_prev = full_body
 
 selected_parts = {p: st.checkbox(p, key=f"check_{p}") for p in BODY_PARTS}
-
-
 
 # --- EQUIPMENT SECTION ---
 st.subheader("Equipment")
@@ -265,9 +218,7 @@ if generate_clicked:
     st.write("### ✅ Your personalized workout plan:")
     st.write(response)
 
-    # ---------------------------------------------------------
-    # 🔍 PARSE CANONICAL EXERCISE NAMES
-    # ---------------------------------------------------------
+    # PARSE CANONICAL EXERCISE NAMES
     canonical_names = []
     for line in response.split("\n"):
         match = re.search(r"Canonical Exercise Name:\s*(.*)", line)
@@ -281,9 +232,7 @@ if generate_clicked:
     st.markdown("---")
     st.subheader("🏋️ Exercise Videos")
 
-    # ---------------------------------------------------------
-    # FETCH + DISPLAY VIDEOS
-    # ---------------------------------------------------------
+    # FETCH + DISPLAY VIDEOS from ExerciseDB API
     seen = set()
     for ex_name in canonical_names:
         if ex_name.lower() in seen:
