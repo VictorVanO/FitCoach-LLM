@@ -6,8 +6,9 @@ from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 import re
 from prompt import workout_prompt
+from ecologits_tracker import EcoMistralTracker
 
-
+eco_tracker = EcoMistralTracker()
 
 load_dotenv(override=True)
 
@@ -61,7 +62,7 @@ def fetch_exercise_video(ex_name):
 
     except:
         return None
-
+    
 model = ChatMistralAI(model="magistral-small-latest", temperature=0.3)
 output_parser = StrOutputParser()
 chain = workout_prompt | model | output_parser
@@ -91,13 +92,13 @@ with col4:
 st.subheader("Fitness Goals")
 user_goals = st.selectbox(
     "Main goal 🎯",
-    ["Muscle gain", "Weight loss", "Endurance improvement", "Flexibility", "General fitness"]
+    ["Muscle gain (Hypertrophy)", "Weight loss", "Endurance improvement", "Flexibility", "General fitness", "Cardio"]
 )
 
 # --- AVAILABILITY ---
 st.subheader("Availability")
 user_days_per_week = st.number_input("Days per week 🗓️", 1, 7, 3)
-user_daily_time = st.number_input("Time per session (minutes) ⏳", 0, 180, 30)
+user_daily_time = st.number_input("Time per session (minutes) ⏳", 0, 180, 60)
 
 # --- TARGET ZONES ---
 st.subheader("Target Zones")
@@ -106,7 +107,7 @@ BODY_PARTS = ["Legs 🦵", "Back 💪", "Shoulders 🤷‍♂️", "Chest 🏋�
 if "full_body_prev" not in st.session_state:
     st.session_state.full_body_prev = False
 
-full_body = st.checkbox("Check All — FULL BODY 🔥", key="full_body")
+full_body = st.checkbox("Check All — FULL BODY 🔥", key="full_body", value=True)
 
 st.markdown(
     """<hr style="margin-top: -8px; margin-bottom: 10px; border: 0.1px solid rgba(255,255,255,0.2);">""",
@@ -147,9 +148,8 @@ if "equip_all_prev" not in st.session_state:
 
 selected_equipment = []
 if equipment_mode == "With equipment":
-
     # --- Check all ---
-    equip_all = st.checkbox("Check All — Equipment 💼", key="equip_all")
+    equip_all = st.checkbox("Check All — Equipment 💼", key="equip_all", value=True)
 
     st.markdown(
         """<hr style="margin-top: -8px; margin-bottom: 10px; border: 0.5px solid rgba(255,255,255,0.2);">""",
@@ -168,7 +168,7 @@ if equipment_mode == "With equipment":
 
     # Normal checkboxes
     for eq in EQUIPMENT_OPTIONS:
-        if st.checkbox(eq, key=f"eq_{eq}"):
+        if st.checkbox(eq, key=f"eq_{eq}", value=True):
             selected_equipment.append(eq)
 
 else:
@@ -215,6 +215,13 @@ if generate_clicked:
                 "equipment": equipment_text,
             })
         st.session_state.program_response = response
+        
+        # ✅ Make ONE tracked inference just for impact measurement
+        eco_text, eco_impacts = eco_tracker.tracked_inference(
+            "Generate a short summary of this workout program for environmental tracking."
+        )
+
+        st.session_state.eco_impact = eco_impacts
 
 if st.session_state.program_response:
     st.write("### ✅ Your personalized workout plan:")
@@ -267,3 +274,35 @@ if canonical_names:
             if st.button("Close", key="close_modal"):
                 st.session_state.selected_exercise = None
 
+if "eco_impact" in st.session_state and st.session_state.eco_impact:
+    impact = st.session_state.eco_impact
+
+    st.markdown("---")
+    st.subheader("🌱 Environmental Impact (EcoLogits)")
+
+    col1, col2 = st.columns(2)
+    col3, col4 = st.columns(2)
+
+    with col1:
+        st.metric(
+            "Energy ⚡",
+            f"{impact.energy.value:.6f} kWh"
+        )
+
+    with col2:
+        st.metric(
+            "Climate Impact 🌍",
+            f"{impact.gwp.value:.6f} kgCO₂eq"
+        )
+
+    with col3:
+        st.metric(
+            "Primary Energy 🔋",
+            f"{impact.pe.value:.6f} MJ"
+        )
+
+    with col4:
+        st.metric(
+            "Resource Depletion 🪨",
+            f"{impact.adpe.value:.6f}"
+        )
