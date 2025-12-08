@@ -7,12 +7,56 @@ from dotenv import load_dotenv
 import re
 from prompt import workout_prompt
 from ecologits_tracker import EcoMistralTracker
+from pint import UnitRegistry
 
 eco_tracker = EcoMistralTracker()
 
 load_dotenv(override=True)
 
 BASE_URL = "https://v2.exercisedb.dev/api/v1"
+
+# Unit Registry for formatting
+u = UnitRegistry()
+u.define("mWh = milliwatt_hour")
+u.define("kWh = kilowatt_hour")
+u.define("mgCO2eq = milligram")
+u.define("kgCO2eq = kilogram")
+u.define("µgSbeq = microgram")
+u.define("kgSbeq = kilogram")
+u.define("kJ = kilojoule")
+u.define("MJ = megajoule")
+u.define("mL = milliliter")
+u.define("L = liter")
+
+def format_energy(energy_value: float, energy_unit: str = "kWh") -> tuple[float, str]:
+    """Format energy to mWh"""
+    val = u.Quantity(energy_value, energy_unit)
+    val = val.to("mWh")
+    return round(val.magnitude, 6), "mWh"
+
+def format_gwp(gwp_value: float, gwp_unit: str = "kgCO2eq") -> tuple[float, str]:
+    """Format GHG emissions to mgCO2eq"""
+    val = u.Quantity(gwp_value, gwp_unit)
+    val = val.to("mgCO2eq")
+    return round(val.magnitude, 6), "mgCO2eq"
+
+def format_adpe(adpe_value: float, adpe_unit: str = "kgSbeq") -> tuple[float, str]:
+    """Format abiotic resources to µgSbeq"""
+    val = u.Quantity(adpe_value, adpe_unit)
+    val = val.to("µgSbeq")
+    return round(val.magnitude, 6), "µgSbeq"
+
+def format_pe(pe_value: float, pe_unit: str = "MJ") -> tuple[float, str]:
+    """Format primary energy to kJ"""
+    val = u.Quantity(pe_value, pe_unit)
+    val = val.to("kJ")
+    return round(val.magnitude, 6), "kJ"
+
+def format_wcf(wcf_value: float, wcf_unit: str = "L") -> tuple[float, str]:
+    """Format water consumption to mL"""
+    val = u.Quantity(wcf_value, wcf_unit)
+    val = val.to("mL")
+    return round(val.magnitude, 6), "mL"
 
 # ExerciseDB API search & video function
 def fetch_exercise_video(ex_name):
@@ -280,29 +324,42 @@ if "eco_impact" in st.session_state and st.session_state.eco_impact:
     st.markdown("---")
     st.subheader("🌱 Environmental Impact (EcoLogits)")
 
+    energy_val, energy_unit = format_energy(impact.energy.value, impact.energy.unit)
+    gwp_val, gwp_unit = format_gwp(impact.gwp.value, impact.gwp.unit)
+    adpe_val, adpe_unit = format_adpe(impact.adpe.value, impact.adpe.unit)
+    pe_val, pe_unit = format_pe(impact.pe.value, impact.pe.unit)
+    wcf_val, wcf_unit = format_wcf(impact.wcf.value, impact.wcf.unit)
+
     col1, col2 = st.columns(2)
     col3, col4 = st.columns(2)
+    col5, _ = st.columns(2)
 
     with col1:
         st.metric(
             "Energy ⚡",
-            f"{impact.energy.value:.6f} kWh"
+            f"{energy_val} {energy_unit}"
         )
 
     with col2:
         st.metric(
             "Climate Impact 🌍",
-            f"{impact.gwp.value:.6f} kgCO₂eq"
+            f"{gwp_val} {gwp_unit}"
         )
 
     with col3:
         st.metric(
-            "Primary Energy 🔋",
-            f"{impact.pe.value:.6f} MJ"
+            "Abiotic Resources 🪨",
+            f"{adpe_val} {adpe_unit}"
         )
 
     with col4:
         st.metric(
-            "Resource Depletion 🪨",
-            f"{impact.adpe.value:.6f}"
+            "Primary Energy 🔋",
+            f"{pe_val} {pe_unit}"
+        )
+
+    with col5:
+        st.metric(
+            "Water Consumption 🚰",
+            f"{wcf_val} {wcf_unit}"
         )
