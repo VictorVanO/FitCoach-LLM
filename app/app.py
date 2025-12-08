@@ -32,31 +32,31 @@ def format_energy(energy_value: float, energy_unit: str = "kWh") -> tuple[float,
     """Format energy to mWh"""
     val = u.Quantity(energy_value, energy_unit)
     val = val.to("mWh")
-    return round(val.magnitude, 6), "mWh"
+    return round(val.magnitude, 3), "mWh"
 
 def format_gwp(gwp_value: float, gwp_unit: str = "kgCO2eq") -> tuple[float, str]:
     """Format GHG emissions to mgCO2eq"""
     val = u.Quantity(gwp_value, gwp_unit)
     val = val.to("mgCO2eq")
-    return round(val.magnitude, 6), "mgCO2eq"
+    return round(val.magnitude, 3), "mgCO2eq"
 
 def format_adpe(adpe_value: float, adpe_unit: str = "kgSbeq") -> tuple[float, str]:
     """Format abiotic resources to µgSbeq"""
     val = u.Quantity(adpe_value, adpe_unit)
     val = val.to("µgSbeq")
-    return round(val.magnitude, 6), "µgSbeq"
+    return round(val.magnitude, 4), "µgSbeq"
 
 def format_pe(pe_value: float, pe_unit: str = "MJ") -> tuple[float, str]:
     """Format primary energy to kJ"""
     val = u.Quantity(pe_value, pe_unit)
     val = val.to("kJ")
-    return round(val.magnitude, 6), "kJ"
+    return round(val.magnitude, 4), "kJ"
 
 def format_wcf(wcf_value: float, wcf_unit: str = "L") -> tuple[float, str]:
     """Format water consumption to mL"""
     val = u.Quantity(wcf_value, wcf_unit)
     val = val.to("mL")
-    return round(val.magnitude, 6), "mL"
+    return round(val.magnitude, 4), "mL"
 
 # ExerciseDB API search & video function
 def fetch_exercise_video(ex_name):
