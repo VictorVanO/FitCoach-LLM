@@ -1,0 +1,8 @@
+streamlit
+requests
+langchain-mistralai
+langchain-core
+python-dotenv
+pint
+mistralai
+ecologits[mistralai]
