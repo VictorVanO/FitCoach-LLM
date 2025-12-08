@@ -8,6 +8,13 @@ import re
 from prompt import workout_prompt
 from ecologits_tracker import EcoMistralTracker
 from pint import UnitRegistry
+from langchain_community.document_loaders import PyMuPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_core.runnables import RunnablePassthrough
+from langchain_mistralai import MistralAIEmbeddings
+
+
 
 eco_tracker = EcoMistralTracker()
 
@@ -159,9 +166,97 @@ def fetch_exercise_video(ex_name):
     except:
         return None
     
+
+
+
 model = ChatMistralAI(model="magistral-small-latest", temperature=0.3)
 output_parser = StrOutputParser()
 chain = workout_prompt | model | output_parser
+
+@st.cache_resource
+def get_rag_chain():
+    """
+    Builds a RAG chain based on the physio/sport PDFs present in the ./pdfs_rag folder.
+    Used to explain and justify a workout plan with evidence-based guidelines.
+    """
+    pdf_files = [
+        "pdfs_rag/back_exercises.pdf",
+        "pdfs_rag/exercise_starter_guide_mayo_clinic.pdf",
+        "pdfs_rag/full_body_stretching_guide.pdf",
+        "pdfs_rag/pep_program_training_plan.pdf",
+        "pdfs_rag/program_exercices_epicondylite_aaos.pdf",
+        "pdfs_rag/resistance-training-ACSM.pdf",
+        "pdfs_rag/rotator_cuff_shoulder_rehab_program_aaos.pdf",
+        "pdfs_rag/spine_conditioning_rehabilitation_program_aaos.pdf",
+        "pdfs_rag/strength_training_guidelines_acsm.pdf",
+        "pdfs_rag/who_physical_activity_2020.pdf",
+    ]
+
+    docs = []
+    for path in pdf_files:
+        loader = PyMuPDFLoader(path)
+        docs.extend(loader.load())
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=800,
+        chunk_overlap=100,
+    )
+    split_docs = splitter.split_documents(docs)
+
+    embeddings = MistralAIEmbeddings(model="mistral-embed")
+    vectorstore = FAISS.from_documents(split_docs, embeddings)
+
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+
+    rag_prompt = PromptTemplate.from_template(
+        """
+        You are an assistant specialized in sports science, physiotherapy
+        and strength training.
+
+        You receive:
+        - CONTEXT: excerpts from evidence-based guidelines (PDFs).
+        - REQUEST: a workout plan and a short description of the user.
+
+        Your task:
+        Using ONLY the CONTEXT:
+        - explain in 4–6 bullet points why the workout plan is coherent (or how to slightly adjust it) regarding:
+        • training volume and intensity,
+        • choice of exercise types (strength, cardio, mobility),
+        • rest times between sets and between training days,
+        • warm-up and cool-down,
+        • injury prevention and joint protection.
+
+        Rules:
+        - DO NOT rewrite the workout plan.
+        - DO NOT invent data that is not in the CONTEXT.
+        - If something is unclear in the CONTEXT, say so briefly.
+        - Be concise, practical, and educational.
+
+        CONTEXT:
+        {context}
+
+        REQUEST:
+        {question}
+
+        EVIDENCE-BASED EXPLANATION:
+        """
+    )
+
+    rag_chain = (
+        {"context": retriever, "question": RunnablePassthrough()}
+        | rag_prompt
+        | model
+        | StrOutputParser()
+    )
+
+    return rag_chain
+
+
+
+
+
+
+
 
 # STREAMLIT UI
 st.set_page_config(page_title="Fit Coach LLM", layout="centered", initial_sidebar_state="collapsed")
@@ -189,6 +284,16 @@ st.subheader("Fitness Goals")
 user_goals = st.selectbox(
     "Main goal 🎯",
     ["Muscle gain (Hypertrophy)", "Weight loss", "Endurance improvement", "Flexibility", "General fitness", "Cardio"]
+)
+
+# --- EXTRA USER NOTES / PROFILE ---
+st.subheader("Additional Information about Your Profile")
+user_notes = st.text_area(
+    "Tell the coach anything important about your profile (experience, sports you already do, lifestyle, preferences, possible limits):",
+    placeholder=(
+        "Example: I play football 2x/week, desk job, weak core, I dislike running on treadmill, "
+        "sometimes light knee discomfort, want to improve mobility."
+    )
 )
 
 # --- AVAILABILITY ---
@@ -279,6 +384,10 @@ st.markdown(
 )
 
 
+
+
+
+
 # SECTION: BUTTON SEND
 if "program_response" not in st.session_state:
     st.session_state.program_response = None
@@ -291,12 +400,13 @@ if generate_clicked:
     if not final_selection:
         st.warning("Please select at least one zone to work on.")
     else:
-        # Texte propre pour le matériel
         equipment_text = (
             ", ".join(selected_equipment)
             if selected_equipment
             else "No equipment (bodyweight / home workouts only)"
         )
+
+        user_profile_text = user_notes or "No additional specific information has been indicated."
 
         with st.spinner("⌛ Generating your personalized workout program... This can take up to a minute."):
             response = chain.invoke({
@@ -309,19 +419,47 @@ if generate_clicked:
                 "daily_time": str(user_daily_time),
                 "days_per_week": str(user_days_per_week),
                 "equipment": equipment_text,
+                "user_notes": user_profile_text,
             })
         st.session_state.program_response = response
-        
-        # ✅ Make ONE tracked inference just for impact measurement
+
+        #RAG
+        rag_explanation = None
+        try:
+            rag_chain = get_rag_chain()
+            rag_question = f"""
+                    User profile:
+                    {user_profile_text}
+
+                    Workout plan:
+                    {response}
+
+                    Explain and justify this plan using the guidelines.
+                """
+            rag_explanation = rag_chain.invoke(rag_question)
+        except Exception as e:
+            rag_explanation = f"RAG explanation unavailable (error: {e})"
+
+        st.session_state.rag_explanation = rag_explanation
+
+        #EcoLogits
         eco_text, eco_impacts = eco_tracker.tracked_inference(
             "Generate a short summary of this workout program for environmental tracking."
         )
-
         st.session_state.eco_impact = eco_impacts
+
+
 
 if st.session_state.program_response:
     st.write("### ✅ Your personalized workout plan:")
     st.write(st.session_state.program_response)
+
+if "rag_explanation" in st.session_state and st.session_state.rag_explanation:
+    st.markdown("---")
+    st.write("### 📚 Evidence-based explanation:")
+    st.write(st.session_state.rag_explanation)
+
+
 
 canonical_names = []
 

@@ -13,6 +13,7 @@ Target Zones: {target_zones}
 Daily available time for training: {daily_time} minutes
 Days per week available for training: {days_per_week} days
 Equipment available: {equipment}
+Additional user notes: {user_notes}
 
 Program Design Principles:
 1. Warm-up + cool-down included
@@ -21,6 +22,10 @@ Program Design Principles:
 4. Age considerations
 5. Progressive overload when needed
 6. Injury prevention
+7. Adaptation to the specific profile
+
+
+
 
 Workout Plan Structure (for each day):
 • Day focus

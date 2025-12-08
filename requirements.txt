@@ -2,8 +2,12 @@ streamlit
 requests
 langchain-mistralai
 langchain-core
+langchain-community
+langchain-text-splitters
+mistralai
+faiss-cpu
+pymupdf
 python-dotenv
 pint
-mistralai
 ecologits
 ecologits[mistralai,openai]
