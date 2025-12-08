@@ -27,6 +27,17 @@ u.define("kJ = kilojoule")
 u.define("MJ = megajoule")
 u.define("mL = milliliter")
 u.define("L = liter")
+u.define("h = hour")
+u.define("min = minute")
+u.define("s = second")
+u.define("km = kilometer")
+u.define("m = meter")
+
+# Equivalence constants
+RUNNING_ENERGY_EQ = u.Quantity(294, "kJ / km")  # running 1 km at 10 km/h with a weight of 70 kg
+WALKING_ENERGY_EQ = u.Quantity(196, "kJ / km")  # walking 1 km at 3 km/h with a weight of 70 kg
+EV_ENERGY_EQ = u.Quantity(0.17, "kWh / km")
+STREAMING_GWP_EQ = u.Quantity(15.6, "h / kgCO2eq")  # hours of video streaming per kgCO2eq
 
 def format_energy(energy_value: float, energy_unit: str = "kWh") -> tuple[float, str]:
     """Format energy to mWh"""
@@ -57,6 +68,47 @@ def format_wcf(wcf_value: float, wcf_unit: str = "L") -> tuple[float, str]:
     val = u.Quantity(wcf_value, wcf_unit)
     val = val.to("mL")
     return round(val.magnitude, 4), "mL"
+
+def get_physical_activity_equivalent(energy: u.Quantity) -> tuple[str, float, str]:
+    """Compare energy consumption with walking or running"""
+    energy_kj = energy.to("kJ")
+    running_distance = energy_kj / RUNNING_ENERGY_EQ
+    
+    if running_distance > u.Quantity(1, "km"):
+        return "🏃 Running", round(running_distance.magnitude, 3), "km"
+    
+    walking_distance = energy_kj / WALKING_ENERGY_EQ
+    if walking_distance < u.Quantity(1, "km"):
+        walking_distance = walking_distance.to("m")
+        return "🚶 Walking", round(walking_distance.magnitude, 3), "m"
+    
+    return "🚶 Walking", round(walking_distance.magnitude, 3), "km"
+
+def get_ev_equivalent(energy: u.Quantity) -> tuple[float, str]:
+    """Compare energy consumption with electric vehicle driving"""
+    energy_kwh = energy.to("kWh")
+    ev_distance = energy_kwh / EV_ENERGY_EQ
+    
+    if ev_distance < u.Quantity(1, "km"):
+        ev_distance = ev_distance.to("m")
+        return round(ev_distance.magnitude, 3), "m"
+    
+    return round(ev_distance.magnitude, 3), "km"
+
+def get_streaming_equivalent(gwp: u.Quantity) -> tuple[float, str]:
+    """Compare GHG emissions with video streaming hours"""
+    gwp_kg = gwp.to("kgCO2eq")
+    streaming_time = gwp_kg * STREAMING_GWP_EQ
+    
+    if streaming_time < u.Quantity(1, "h"):
+        streaming_time = streaming_time.to("min")
+        return round(streaming_time.magnitude, 3), "min"
+    
+    if streaming_time < u.Quantity(1, "min"):
+        streaming_time = streaming_time.to("s")
+        return round(streaming_time.magnitude, 3), "s"
+    
+    return round(streaming_time.magnitude, 3), "h"
 
 # ExerciseDB API search & video function
 def fetch_exercise_video(ex_name):
@@ -324,6 +376,7 @@ if "eco_impact" in st.session_state and st.session_state.eco_impact:
     st.markdown("---")
     st.subheader("🌱 Environmental Impact (EcoLogits)")
 
+    # Format impacts using EcoLogits metrics
     energy_val, energy_unit = format_energy(impact.energy.value, impact.energy.unit)
     gwp_val, gwp_unit = format_gwp(impact.gwp.value, impact.gwp.unit)
     adpe_val, adpe_unit = format_adpe(impact.adpe.value, impact.adpe.unit)
@@ -363,3 +416,31 @@ if "eco_impact" in st.session_state and st.session_state.eco_impact:
             "Water Consumption 🚰",
             f"{wcf_val} {wcf_unit}"
         )
+
+    # EQUIVALENCES SECTION
+    st.markdown("---")
+    st.markdown('<h3 align="center">Equivalences</h3>', unsafe_allow_html=True)
+    st.markdown('<p align="center">Making this request to the LLM is equivalent to the following actions:</p>', unsafe_allow_html=True)
+
+    # Convert impact objects to Quantity for equivalence calculations
+    energy_quantity = u.Quantity(impact.energy.value, impact.energy.unit)
+    gwp_quantity = u.Quantity(impact.gwp.value, impact.gwp.unit)
+
+    # Get equivalences
+    activity, activity_distance, activity_unit = get_physical_activity_equivalent(energy_quantity)
+    ev_distance, ev_unit = get_ev_equivalent(energy_quantity)
+    streaming_time, streaming_unit = get_streaming_equivalent(gwp_quantity)
+
+    eq_col1, eq_col2, eq_col3 = st.columns(3)
+
+    with eq_col1:
+        st.markdown(f'<h4 align="center">{activity}</h4>', unsafe_allow_html=True)
+        st.markdown(f'<p style="font-size: 24px; text-align: center;">{activity_distance} {activity_unit}</p>', unsafe_allow_html=True)
+
+    with eq_col2:
+        st.markdown(f'<h4 align="center">🔋 Electric Vehicle</h4>', unsafe_allow_html=True)
+        st.markdown(f'<p style="font-size: 24px; text-align: center;">{ev_distance} {ev_unit}</p>', unsafe_allow_html=True)
+
+    with eq_col3:
+        st.markdown(f'<h4 align="center">⏯️ Video Streaming</h4>', unsafe_allow_html=True)
+        st.markdown(f'<p style="font-size: 24px; text-align: center;">{streaming_time} {streaming_unit}</p>', unsafe_allow_html=True)
