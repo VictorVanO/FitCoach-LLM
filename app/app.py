@@ -258,12 +258,12 @@ def get_rag_chain():
 def get_injury_risk_model():
     """Load the injury risk prediction model"""
     try:
-        model_path = os.path.join(PROJECT_ROOT, "app/models", "injury_risk_synthetic.joblib")
+        model_path = os.path.join(PROJECT_ROOT, "app", "models", "injury_risk_synthetic.joblib")
         import joblib
         return joblib.load(model_path)
     except Exception as e:
         st.warning(f"Could not load injury risk model: {e}")
-        st.warning(f"Looked for model at: {os.path.join(PROJECT_ROOT, 'app/models', 'injury_risk_synthetic.joblib')}")
+        st.warning(f"Looked for model at: {os.path.join(PROJECT_ROOT, 'app', 'models', 'injury_risk_synthetic.joblib')}")
         return None
 
 
@@ -322,14 +322,26 @@ user_daily_time = st.number_input("Time per session (minutes) ⏳", 0, 180, 60)
 
 # Training intensity for injury risk model
 st.subheader("Training Intensity")
-training_intensity = st.slider(
-    "Training intensity level 💪",
-    min_value=1.0,
-    max_value=10.0,
-    value=5.0,
-    step=0.5,
-    help="1 = light/recovery, 5 = moderate, 10 = maximum effort"
+intensity_description = st.radio(
+    "How would you describe your typical training intensity? 💪",
+    options=[
+        "Light (recovery, walking, stretching, <50% max effort)",
+        "Moderate (can hold a conversation, 50-70% max effort)",
+        "High (difficult to talk, 70-85% max effort)",
+        "Very High (pushing limits, >85% max effort)"
+    ],
+    index=1,
+    help="Based on Rate of Perceived Exertion (RPE) and ability to speak during exercise"
 )
+
+# Map description to numeric value for ML model
+intensity_mapping = {
+    "Light (recovery, walking, stretching, <50% max effort)": 2.5,
+    "Moderate (can hold a conversation, 50-70% max effort)": 5.0,
+    "High (difficult to talk, 70-85% max effort)": 7.5,
+    "Very High (pushing limits, >85% max effort)": 9.0
+}
+training_intensity = intensity_mapping[intensity_description]
 
 # --- TARGET ZONES ---
 st.subheader("Target Zones")
@@ -535,8 +547,8 @@ if st.session_state.injury_risk:
     with col_risk3:
         st.metric(
             "💪 Training Intensity",
-            f"{training_intensity}/10",
-            "Current level"
+            intensity_description.split(" ")[0],  # "Light", "Moderate", "High", "Very High"
+            f"({training_intensity}/10 scale)"
         )
     
     st.info(f"**Recommendation:** {recommendation}")
