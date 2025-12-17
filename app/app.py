@@ -177,70 +177,66 @@ chain = workout_prompt | model | output_parser
 
 @st.cache_resource
 def get_rag_chain():
-    """
-    Builds a RAG chain based on the physio/sport PDFs present in the ./pdfs_rag folder.
-    Used to explain and justify a workout plan with evidence-based guidelines.
-    """
     pdf_files = [
         "pdfs_rag/back_exercises.pdf",
         "pdfs_rag/exercise_starter_guide_mayo_clinic.pdf",
         "pdfs_rag/full_body_stretching_guide.pdf",
         "pdfs_rag/pep_program_training_plan.pdf",
         "pdfs_rag/program_exercices_epicondylite_aaos.pdf",
-        "pdfs_rag/resistance-training-ACSM.pdf",
+        "pdfs_rag/resistance-training_acsm.pdf",
         "pdfs_rag/rotator_cuff_shoulder_rehab_program_aaos.pdf",
         "pdfs_rag/spine_conditioning_rehabilitation_program_aaos.pdf",
         "pdfs_rag/strength_training_guidelines_acsm.pdf",
         "pdfs_rag/who_physical_activity_2020.pdf",
+        "pdfs_rag/physical_activity_daily_guide_2.pdf"
     ]
+
+
 
     docs = []
     for path in pdf_files:
         loader = PyMuPDFLoader(path)
-        docs.extend(loader.load())
+        loaded = loader.load()
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=100,
-    )
+        for d in loaded:
+            d.metadata["source"] = path
+            d.metadata["filename"] = os.path.basename(path)
+
+        docs.extend(loaded)
+
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
     split_docs = splitter.split_documents(docs)
 
     embeddings = MistralAIEmbeddings(model="mistral-embed")
     vectorstore = FAISS.from_documents(split_docs, embeddings)
-
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
 
     rag_prompt = PromptTemplate.from_template(
         """
-        You are an assistant specialized in sports science, physiotherapy
-        and strength training.
+        You are a workout coach. Generate a workout program using ONLY the CONTEXT (local PDFs).
+        If missing info, use safe conservative defaults.
 
-        You receive:
-        - CONTEXT: excerpts from evidence-based guidelines (PDFs).
-        - REQUEST: a workout plan and a short description of the user.
-
-        Your task:
-        Using ONLY the CONTEXT:
-        - explain in 4–6 bullet points why the workout plan is coherent (or how to slightly adjust it) regarding:
-        • training volume and intensity,
-        • choice of exercise types (strength, cardio, mobility),
-        • rest times between sets and between training days,
-        • warm-up and cool-down,
-        • injury prevention and joint protection.
+        Output format (strict):
+        For each day:
+        - Day X: Focus
+        - Warm-up (5–10 min)
+        - 3–5 main exercises with Sets x Reps + Rest
+        - Cool-down (5–10 min)
 
         Rules:
-        - DO NOT rewrite the workout plan.
-        - DO NOT invent data that is not in the CONTEXT.
-        - If something is unclear in the CONTEXT, say so briefly.
-        - Be concise, practical, and educational.
+        - Use exercises coherent with the CONTEXT.
+        - Keep it safe, progressive, aligned with the user profile & goals.
+        - After EACH main exercise, add a new line exactly like:
+        Canonical Exercise Name: <simple common name>
 
         CONTEXT:
         {context}
 
-        REQUEST:
+        USER REQUEST:
         {question}
 
-        EVIDENCE-BASED EXPLANATION:
+        WORKOUT PLAN:
         """
     )
 
@@ -251,7 +247,22 @@ def get_rag_chain():
         | StrOutputParser()
     )
 
-    return rag_chain
+    # ✅ return retriever too (so we can show sources)
+    return rag_chain, retriever
+
+PDF_SOURCE_URLS = {
+"back_exercises.pdf": "https://d3djccaurgtij4.cloudfront.net/pe-back-exercises.pdf",
+"exercise_starter_guide_mayo_clinic.pdf": "https://cstud-prod-lwc.mayo.edu/wp-content/uploads/2019/10/mc5612-03.pdf",
+"full_body_stretching_guide.pdf": "https://media.specialolympics.org/resources/health/fitness/Fitness-Dynamic-Streches-Guide.pdf",
+"physical_activity_daily_guide_2.pdf": "https://www.moh.gov.jm/wp-content/uploads/2020/11/Physical-Activity-Daily-Guide-2.pdf",
+"pep_program_training_plan.pdf": "https://ubortho.com/wp-content/uploads/2020/01/pep-program.pdf",
+"program_exercices_epicondylite_aaos.pdf": "https://orthoinfo.aaos.org/globalassets/pdfs/a00790_therapeutic-exercise-program-for-epicondylitis_final.pdf",
+"resistance-training_acsm.pdf": "https://www.prescriptiontogetactive.com/static/pdfs/resistance-training-ACSM.pdf",
+"rotator_cuff_shoulder_rehab_program_aaos.pdf": "https://orthoinfo.aaos.org/globalassets/pdfs/2017-rehab_shoulder.pdf",
+"spine_conditioning_rehabilitation_program_aaos.pdf": "https://orthoinfo.aaos.org/globalassets/pdfs/2017-rehab_spine.pdf",
+"strength_training_guidelines_acsm.pdf": "https://www.pfswellness.com/forms/ACSM_STRENGTH_TRAINING_GUIDELINES__Role_in_Body.7.pdf",
+"who_physical_activity_2020.pdf": "https://iris.who.int/server/api/core/bitstreams/faa83413-d89e-4be9-bb01-b24671aef7ca/content",
+}
 
 
 @st.cache_resource
@@ -437,7 +448,7 @@ generate_clicked = st.button("Generate My Program", type="primary")
 
 if generate_clicked:
     final_selection = [part for part, is_checked in selected_parts.items() if is_checked]
-    
+
     if not final_selection:
         st.warning("Please select at least one zone to work on.")
     else:
@@ -467,45 +478,86 @@ if generate_clicked:
                 st.warning(f"Injury risk calculation failed: {e}")
                 st.session_state.injury_risk = None
 
+        # ========== RAG WORKOUT GENERATION (ONLY ON CLICK) ==========
         with st.spinner("⌛ Generating your personalized workout program... This can take up to a minute."):
-            response = chain.invoke({
-                "gender": user_gender,
-                "age": str(user_age),
-                "height": str(user_height),
-                "weight": str(user_weight),
-                "goals": user_goals,
-                "target_zones": ", ".join(final_selection),
-                "daily_time": str(user_daily_time),
-                "days_per_week": str(user_days_per_week),
-                "equipment": equipment_text,
-                "user_notes": user_profile_text,
-            })
-        st.session_state.program_response = response
+            
 
-        # RAG
-        rag_explanation = None
-        try:
-            rag_chain = get_rag_chain()
             rag_question = f"""
-                    User profile:
-                    {user_profile_text}
+            Gender: {user_gender}
+            Age: {user_age}
+            Height: {user_height} cm
+            Weight: {user_weight} kg
+            Goals: {user_goals}
+            Target Zones: {", ".join(final_selection)}
+            Daily available time: {user_daily_time} minutes
+            Days per week: {user_days_per_week}
+            Equipment available: {equipment_text}
+            Additional notes: {user_profile_text}
 
-                    Workout plan:
-                    {response}
+            Injury context:
+            - Previous injuries: {previous_injuries}
+            - Avg recovery time (days): {recovery_time}
+            - Training intensity: {training_intensity}/10
+            """
 
-                    Explain and justify this plan using the guidelines.
-                """
-            rag_explanation = rag_chain.invoke(rag_question)
-        except Exception as e:
-            rag_explanation = f"RAG explanation unavailable (error: {e})"
+            rag_chain, retriever = get_rag_chain()
 
-        st.session_state.rag_explanation = rag_explanation
 
-        # EcoLogits
+            response = rag_chain.invoke(rag_question)
+            st.session_state.program_response = response
+            st.session_state.program_response_display = re.sub(
+                r"(?m)^\s*Canonical Exercise Name:\s*.*\n?", 
+                "", 
+                response
+            ).strip()
+
+
+            # fetch the exact docs used (top-k)
+            source_docs = retriever.invoke(rag_question)
+
+            st.session_state.rag_sources = source_docs
+
+
+
+        # ========== EcoLogits (ONLY ON CLICK) ==========
         eco_text, eco_impacts = eco_tracker.tracked_inference(
             "Generate a short summary of this workout program for environmental tracking."
         )
         st.session_state.eco_impact = eco_impacts
+
+
+# ========= DISPLAY (ALWAYS) =========
+if st.session_state.get("program_response_display"):
+    st.markdown("---")
+    st.write("### ✅ Your personalized workout plan:")
+    st.write(st.session_state.program_response_display)
+
+if st.session_state.get("rag_sources"):
+    st.markdown("---")
+    st.write("### 📄 Sources used")
+
+    seen = set()
+    for d in st.session_state.rag_sources:
+        src = d.metadata.get("source", "unknown")
+        page = d.metadata.get("page", None)
+
+        filename = os.path.basename(src)
+        url = PDF_SOURCE_URLS.get(filename)
+
+        key = (filename, page)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        page_txt = f"page **{int(page) + 1}**" if page is not None else "page unknown"
+
+        if url:
+            st.markdown(f"- **[{filename}]({url})**, {page_txt}")
+        else:
+            st.markdown(f"- **{filename}**, {page_txt}")
+
+
+
 
 
 # ========== INJURY RISK DISPLAY ==========
@@ -554,14 +606,6 @@ if st.session_state.injury_risk:
     st.info(f"**Recommendation:** {recommendation}")
 
 
-if st.session_state.program_response:
-    st.write("### ✅ Your personalized workout plan:")
-    st.write(st.session_state.program_response)
-
-if "rag_explanation" in st.session_state and st.session_state.rag_explanation:
-    st.markdown("---")
-    st.write("### 📚 Evidence-based explanation:")
-    st.write(st.session_state.rag_explanation)
 
 
 canonical_names = []
