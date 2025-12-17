@@ -14,8 +14,11 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.runnables import RunnablePassthrough
 from langchain_mistralai import MistralAIEmbeddings
 from ml_injury_risk_synthetic import load_model, predict_injury_risk
+import os
 
-
+# Get the directory where app.py is located
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(APP_DIR)
 
 eco_tracker = EcoMistralTracker()
 
@@ -166,8 +169,6 @@ def fetch_exercise_video(ex_name):
 
     except:
         return None
-    
-
 
 
 model = ChatMistralAI(model="magistral-small-latest", temperature=0.3)
@@ -253,10 +254,17 @@ def get_rag_chain():
     return rag_chain
 
 
-
-
-
-
+@st.cache_resource
+def get_injury_risk_model():
+    """Load the injury risk prediction model"""
+    try:
+        model_path = os.path.join(PROJECT_ROOT, "app/models", "injury_risk_synthetic.joblib")
+        import joblib
+        return joblib.load(model_path)
+    except Exception as e:
+        st.warning(f"Could not load injury risk model: {e}")
+        st.warning(f"Looked for model at: {os.path.join(PROJECT_ROOT, 'app/models', 'injury_risk_synthetic.joblib')}")
+        return None
 
 
 # STREAMLIT UI
@@ -280,6 +288,16 @@ with col3:
 with col4:
     user_height = st.number_input("Height (cm) 📏", min_value=50, max_value=250, value=175)
 
+# --- INJURY HISTORY ---
+st.subheader("Injury & Recovery Profile")
+col_inj1, col_inj2 = st.columns(2)
+with col_inj1:
+    previous_injuries = st.number_input("Previous injuries 🤕", min_value=0, max_value=10, value=0, 
+                                        help="Number of past injuries or surgeries")
+with col_inj2:
+    recovery_time = st.number_input("Avg recovery time (days) ⏱️", min_value=1, max_value=365, value=30,
+                                     help="Average recovery time between intense training sessions")
+
 # --- GOALS ---
 st.subheader("Fitness Goals")
 user_goals = st.selectbox(
@@ -301,6 +319,17 @@ user_notes = st.text_area(
 st.subheader("Availability")
 user_days_per_week = st.number_input("Days per week 🗓️", 1, 7, 3)
 user_daily_time = st.number_input("Time per session (minutes) ⏳", 0, 180, 60)
+
+# Training intensity for injury risk model
+st.subheader("Training Intensity")
+training_intensity = st.slider(
+    "Training intensity level 💪",
+    min_value=1.0,
+    max_value=10.0,
+    value=5.0,
+    step=0.5,
+    help="1 = light/recovery, 5 = moderate, 10 = maximum effort"
+)
 
 # --- TARGET ZONES ---
 st.subheader("Target Zones")
@@ -344,7 +373,7 @@ EQUIPMENT_OPTIONS = [
     "TRX / suspension trainer",
 ]
 
-# With Equipement
+# With Equipment
 if "equip_all_prev" not in st.session_state:
     st.session_state.equip_all_prev = False
 
@@ -374,7 +403,7 @@ if equipment_mode == "With equipment":
             selected_equipment.append(eq)
 
 else:
-    # No equipement
+    # No equipment
     selected_equipment = []
 
 
@@ -385,13 +414,12 @@ st.markdown(
 )
 
 
-
-
-
-
 # SECTION: BUTTON SEND
 if "program_response" not in st.session_state:
     st.session_state.program_response = None
+
+if "injury_risk" not in st.session_state:
+    st.session_state.injury_risk = None
 
 generate_clicked = st.button("Generate My Program", type="primary")
 
@@ -409,6 +437,24 @@ if generate_clicked:
 
         user_profile_text = user_notes or "No additional specific information has been indicated."
 
+        # ========== INJURY RISK PREDICTION ==========
+        injury_risk_model = get_injury_risk_model()
+        if injury_risk_model:
+            try:
+                injury_prediction = predict_injury_risk(
+                    injury_risk_model,
+                    age=user_age,
+                    weight=user_weight,
+                    height_cm=user_height,
+                    training_intensity=training_intensity,
+                    recovery_time=recovery_time,
+                    previous_injuries=previous_injuries,
+                )
+                st.session_state.injury_risk = injury_prediction
+            except Exception as e:
+                st.warning(f"Injury risk calculation failed: {e}")
+                st.session_state.injury_risk = None
+
         with st.spinner("⌛ Generating your personalized workout program... This can take up to a minute."):
             response = chain.invoke({
                 "gender": user_gender,
@@ -424,7 +470,7 @@ if generate_clicked:
             })
         st.session_state.program_response = response
 
-        #RAG
+        # RAG
         rag_explanation = None
         try:
             rag_chain = get_rag_chain()
@@ -443,12 +489,57 @@ if generate_clicked:
 
         st.session_state.rag_explanation = rag_explanation
 
-        #EcoLogits
+        # EcoLogits
         eco_text, eco_impacts = eco_tracker.tracked_inference(
             "Generate a short summary of this workout program for environmental tracking."
         )
         st.session_state.eco_impact = eco_impacts
 
+
+# ========== INJURY RISK DISPLAY ==========
+if st.session_state.injury_risk:
+    st.markdown("---")
+    st.subheader("🏥 Injury Risk Assessment")
+    
+    injury = st.session_state.injury_risk
+    risk_level = injury["risk_label"]
+    risk_prob = injury["risk_probability"]
+    bmi = injury["bmi"]
+    
+    # Color coding based on risk level
+    if risk_level == "High":
+        risk_color = "#ff4444"
+        risk_emoji = "⚠️"
+        recommendation = "Consider reducing training intensity or increasing recovery time between sessions."
+    else:
+        risk_color = "#44ff44"
+        risk_emoji = "✅"
+        recommendation = "Your injury risk is currently low. Maintain proper form and progressive overload."
+    
+    col_risk1, col_risk2, col_risk3 = st.columns(3)
+    
+    with col_risk1:
+        st.metric(
+            f"{risk_emoji} Injury Risk Level",
+            risk_level,
+            f"{risk_prob * 100:.1f}% probability"
+        )
+    
+    with col_risk2:
+        st.metric(
+            "📊 BMI",
+            f"{bmi}",
+            "Body Mass Index"
+        )
+    
+    with col_risk3:
+        st.metric(
+            "💪 Training Intensity",
+            f"{training_intensity}/10",
+            "Current level"
+        )
+    
+    st.info(f"**Recommendation:** {recommendation}")
 
 
 if st.session_state.program_response:
@@ -459,7 +550,6 @@ if "rag_explanation" in st.session_state and st.session_state.rag_explanation:
     st.markdown("---")
     st.write("### 📚 Evidence-based explanation:")
     st.write(st.session_state.rag_explanation)
-
 
 
 canonical_names = []

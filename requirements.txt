@@ -12,3 +12,4 @@ pint
 ecologits
 ecologits[mistralai,openai]
 langchain-community
+faiss-cpu
