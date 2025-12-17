@@ -13,6 +13,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.runnables import RunnablePassthrough
 from langchain_mistralai import MistralAIEmbeddings
+from ml_injury_risk_synthetic import load_model, predict_injury_risk
 
 
 

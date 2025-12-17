@@ -11,3 +11,4 @@ python-dotenv
 pint
 ecologits
 ecologits[mistralai,openai]
+langchain-community
