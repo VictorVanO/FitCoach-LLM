@@ -23,3 +23,9 @@ Run the app:
 ```
 streamlit run app/app.py
 ```
+
+Performance benchmark:
+
+```
+python app/run_benchmark.py
+```
